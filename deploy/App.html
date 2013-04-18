@@ -159,32 +159,48 @@
                     Ext.Array.each(count_array,function(item){
                         int_array.push([item.name,item.percentage]);
                     });
+                    me._log("change!");
                     var store = Ext.create('Rally.data.custom.Store',{
                         data: count_array
                     });
                     if ( this.chart ) { this.chart.destroy(); }
                     this.chart = Ext.create('Rally.ui.chart.Chart',{
-                        /*series: [{type:'pie',dataIndex:'percentage',name:'Points',visible:true}],
-                        store:store,*/
-                        chartConfig:{
-                            chart:{},
-                            title: { text: 'Distribution of Work Types', align:'Center' },
-                            series:[{type:'pie',data:int_array,visible:true}],
-                            tooltip: { enabled: false }, 
-                            plotOptions:{
+                        chartConfig: {
+                            chart: {
+                                plotBackgroundColor: null,
+                                plotBorderWidth: null,
+                                plotShadow: false
+                            },
+                            title: {
+                                text: 'Distribution of Work Types'
+                            },
+                            tooltip: {
+                                enabled: false
+                            },
+                            plotOptions: {
                                 pie: {
+                                    allowPointSelect: false,
+                                    cursor: 'pointer',
                                     dataLabels: {
-                                        enabled:true,
+                                        enabled: true,
+                                        color: '#000000',
+                                        connectorColor: '#000000',
                                         formatter: function() {
-                                            return '<b>' + this.point.name + '</b>: ' + me._limitDecimals(this.percentage) + '%';
+                                            return '<b>'+ this.point.name +'</b>: '+ me._limitDecimals(this.percentage) +' %';
                                         }
                                     }
                                 }
-                            }
+                            },
+                            series: [{
+                                type: 'pie',
+                                data: int_array
+                            }]
                         }
                     });
+                    this._log("chart made");
                     this.down('#chart_box').add(this.chart);
                     this._hideMask();
+                    this._log("chart done");
                 },
                 _limitDecimals: function(initial_value) {
                     return parseInt( 10*initial_value, 10 ) / 10;
