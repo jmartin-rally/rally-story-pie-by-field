@@ -10,6 +10,7 @@
     componentCls: 'app',
     categoryField: 'WorkType',
     allRelease: '--ANY--',
+    version: 0.1,
     defaults: { padding: 5 },
     items: [{xtype:'container',itemId:'selector_box'},{xtype:'container',itemId:'chart_box'}],
     launch: function() {
