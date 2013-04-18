@@ -154,7 +154,6 @@
         });
         if ( this.chart ) { this.chart.destroy(); }
         this.chart = Ext.create('Rally.ui.chart.Chart',{
-            height: 400,
             /*series: [{type:'pie',dataIndex:'percentage',name:'Points',visible:true}],
             store:store,*/
             chartConfig:{
