@@ -1,5 +1,9 @@
 #Story Pie By Field
 
+Pick a field in Edit App Settings... and this app will show you the distribution
+of stories that are associated with each allowed value in that field, in a pie
+chart divided by plan estimate.
+
 ## Development Notes
 
 ### First Load
