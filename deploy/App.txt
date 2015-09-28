@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Story Pie By Field</title>
+    <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
+    <!--  Build Date: Mon Sep 28 2015 15:24:36 GMT-0700 (PDT) -->
+    
+    <script type="text/javascript">
+        var APP_BUILD_DATE = "Mon Sep 28 2015 15:24:36 GMT-0700 (PDT)";
+        var CHECKSUM = 3533124280;
+    </script>
+    
+    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+             
+/**
+ * A link that pops up a version dialog box
+ */
+
+Ext.define('Rally.technicalservices.InfoLink',{
+    extend: 'Rally.ui.dialog.Dialog',
+    alias: 'widget.tsinfolink',
+    
+    /**
+     * @cfg {String} informationHtml
+     * Additional text to be displayed on the popup dialog (for exmaple,
+     * to add a description of the app's use or functionality)
+     */
+    informationHtml: null,
+    
+    /**
+     * 
+     * cfg {String} title
+     * The title for the dialog box
+     */
+    title: "Build Information",
+    
+    defaults: { padding: 5, margin: 5 },
+
+    closable: true,
+     
+    draggable: true,
+
+    autoShow: true,
+   
+    width: 350, 
+    
+    initComponent: function() {
+        var id = Ext.id(this);
+        this.title =  "<span class='icon-help'> </span>" + this.title;
+        this.callParent(arguments);
+    },
+    
+    _generateChecksum: function(string){
+        var chk = 0x12345678,
+            i;
+        string = string.replace(/var CHECKSUM = .*;/,"");
+        string = string.replace(/\s/g,"");  //Remove all whitespace from the string.
+        
+        for (i = 0; i < string.length; i++) {
+            chk += (string.charCodeAt(i) * i);
+        }
+    
+        return chk;
+    },
+    
+    _checkChecksum: function(container) {
+        var deferred = Ext.create('Deft.Deferred');
+        console.log("_checkChecksum", container);
+        var me = this;
+        
+        Ext.Ajax.request({
+            url: document.URL,
+            params: {
+                id: 1
+            },
+            success: function (response) {
+                text = response.responseText;
+                if ( CHECKSUM ) {
+                    if ( CHECKSUM !== me._generateChecksum(text) ) {
+                        console.log("Checksums don't match!");
+                        deferred.resolve(false);
+                        return;
+                    }
+                }
+                deferred.resolve(true);
+            }
+        });
+        
+        return deferred.promise;
+    },
+    
+    afterRender: function() {
+        var app = Rally.getApp();
+        
+        if (! app.isExternal() ) {
+                
+            this._checkChecksum(app).then({
+                scope: this,
+                success: function(result){
+                    if ( !result ) {
+                        this.addDocked({
+                            xtype:'container',
+                            cls: 'build-info',
+                            padding: 2,
+                            html:'<span class="icon-warning"> </span>Checksums do not match'
+                        });
+                    }
+                },
+                failure: function(msg){
+                    console.log("oops:",msg);
+                }
+            });
+        } else {
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                html:'... Running externally'
+            });
+        }
+        this.callParent(arguments);
+    },
+    
+    beforeRender: function() {
+        var me = this;
+        this.callParent(arguments);
+
+        if (this.informationHtml) {
+            this.addDocked({
+                xtype: 'component',
+                componentCls: 'intro-panel',
+                padding: 2,
+                html: this.informationHtml
+            });
+        }
+        
+        this.addDocked({
+            xtype:'container',
+            cls: 'build-info',
+            padding: 2,
+            html:"This app was created by the Rally Technical Services Team."
+        });
+        
+        if ( APP_BUILD_DATE ) {
+            this.addDocked({
+                xtype:'container',
+                cls: 'build-info',
+                padding: 2,
+                html:'Build date/time: ' + APP_BUILD_DATE
+            });
+        }
+    }
+});
+
+/*
+ */
+Ext.define('Rally.technicalservices.Logger',{
+    constructor: function(config){
+        Ext.apply(this,config);
+    },
+    log: function(args){
+        var timestamp = "[ " + Ext.util.Format.date(new Date(), "Y-m-d H:i:s.u") + " ]";
+        //var output_args = arguments;
+        //output_args.unshift( [ "[ " + timestamp + " ]" ] );
+        //output_args = Ext.Array.push(output_args,arguments);
+        
+        var output_args = [];
+        output_args = Ext.Array.push(output_args,[timestamp]);
+        output_args = Ext.Array.push(output_args, Ext.Array.slice(arguments,0));
+
+        window.console && console.log.apply(console,output_args);
+    }
+
+});
+
+ Ext.define('TSStoryPie', {
+    extend: 'Rally.app.App',
+    componentCls: 'app',
+    allRelease: '--ANY--',
+    defaults: { padding: 5 },
+    logger: new Rally.technicalservices.Logger(),
+
+    items: [
+        {xtype:'container',itemId:'selector_box'},
+        {xtype:'container',itemId:'chart_box'}
+    ],
+    
+    config: {
+        defaultSettings: {
+            categoryField: 'ScheduleState'
+        }
+    },
+    
+    launch: function() {
+        this._addTimeboxSelector();
+    },
+    
+    _addTimeboxSelector: function() {
+        var me = this;
+        
+        var first_time = true;
+        
+        this.down('#selector_box').add({
+            xtype:'rallyreleasecombobox',
+            itemId:'release_box',
+            stateId: 'pxs.pie.release',
+            stateful: true,
+            stateEvents: ['change'],
+            getState: function() {
+                return { value: this.getRawValue() };
+            },
+            applyState: function(state) {
+                if ( state && state.value ) {
+                    me.applied_state = state.value;
+                }
+            },
+            listeners: {
+                change: function(rb,newValue,oldValue) {
+                    this._getStories(rb.getRecord().get('Name'));
+                },
+                ready: function(rb) {
+                    // applyState (above) seems to work before the data is loaded
+                    if (this.applied_state) {
+                        var same_release = rb.findRecordByDisplay(this.applied_state);
+                        if ( same_release ) {
+                            rb.setValue(same_release);
+                        }
+                    }
+                    this._getStories(rb.getRecord().get('Name'));
+                },
+                scope: this
+            },
+            storeConfig: {
+                listeners: {
+                    load: function(store) {
+                        if ( first_time ) {
+                            store.loadData([{formattedName: me.allRelease,
+                                            formattedStartDate: 'n/a',
+                                            formattedEndDate: 'n/a',
+                                            Name: me.allRelease,
+                                            isSelected: false}],
+                                            true);
+                            store.sort('formattedStartDate', 'DESC');
+                            first_time = false;
+                        }
+                        
+                     }
+                }
+            }
+        });
+    },
+
+    _getStories: function(release_name) {
+        this.setLoading("Finding Stories in Release: ", release_name);
+        
+        if ( this.chart ) { this.chart.destroy(); }
+        var filters = [{property:'Release.Name',value:release_name}];
+        if ( release_name === this.allRelease ) {
+            filters = [{property:'ObjectID',operator:'>',value:0}];
+        }
+        
+        var fetch_fields = ['PlanEstimate', this.getSetting('categoryField')];
+        
+        Ext.create('Rally.data.WsapiDataStore',{
+            model:'UserStory',
+            autoLoad: true,
+            filters: filters,
+            fetch: fetch_fields,
+            limit: Infinity,
+            listeners: {
+                load: function(store,data){
+                    if ( data.length === 0 ) {
+                        this._showNoData();
+                    } else {
+                        this._countPointsByCategory(data);
+                    }
+                   
+                },
+                scope: this
+            }
+        });
+    },
+    
+    _showNoData: function() {
+        if ( this.chart ) { 
+            this.chart.destroy();
+        }
+        this.chart = Ext.create('Ext.container.Container', {html:'No data found in selected release.'});
+        this.down('#chart_box').add(this.chart);
+        this.setLoading(false);
+    },
+    
+    _countPointsByCategory: function(records) {
+        this.logger.log("_countPointsByCategory");
+
+        var counts = {};
+        var counter = 0;
+        var total = 0;
+        var category_field = this.getSetting('categoryField');
+        this.logger.log("Category Field:", category_field);
+        
+        Ext.Array.each( records, function(record) {
+                var category = record.get(category_field);
+                var points = record.get('PlanEstimate') || 0;
+                if ( ! category || category === "" ) {
+                    category = "No Category";
+                }
+                if ( ! counts[category] ) { counts[category] = 0; }
+                counts[category] += points;
+                total += points;
+                counter++;
+        });
+        
+        // normalize to percentages
+        var count_array = [];
+        for ( var category in counts ) {
+            if ( counts.hasOwnProperty(category) ) {
+                count_array.push({
+                    name:  category,
+                    count: counts[category],
+                    percentage:  100*counts[category]/total
+                });
+            }
+        }
+        this._showPie(count_array);
+    },
+    
+    _showPie:function(count_array){
+        this.logger.log('_showPie', count_array);
+        
+        var me = this;
+        
+        var int_array = [];
+        Ext.Array.each(count_array,function(item){
+            int_array.push([item.name,item.percentage]);
+        });
+
+        if ( this.chart ) { this.chart.destroy(); }
+        this.chart = Ext.create('Rally.ui.chart.Chart',{
+            loadMask: false,
+            chartData: {
+                series: [{type:'pie',data:int_array}]
+            },
+            chartConfig: {
+
+                chart: { 
+                    type: 'pie',
+                    plotBackgroundColor: null,
+                    plotBorderWidth: null,
+                    plotShadow: false
+                },
+                title: {
+                    text: 'Distribution of Work Types'
+                },
+                tooltip: {
+                    enabled: false
+                },
+                plotOptions: {
+                    pie: {
+                        allowPointSelect: false,
+                        cursor: 'pointer',
+                        dataLabels: {
+                            enabled: true,
+                            color: '#000000',
+                            connectorColor: '#000000',
+                            formatter: function() {
+                                return '<b>'+ this.point.name +'</b>: '+ me._limitDecimals(this.percentage) +' %';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        console.log('box:', this.down('#chart_box'));
+        
+        this.down('#chart_box').add(this.chart);
+        this.setLoading(false);
+        this.logger.log('done');
+    },
+    _limitDecimals: function(initial_value) {
+        return parseInt( 10*initial_value, 10 ) / 10;
+    },
+    
+    getOptions: function() {
+        return [
+            {
+                text: 'About...',
+                handler: this._launchInfo,
+                scope: this
+            }
+        ];
+    },
+    
+    _launchInfo: function() {
+        if ( this.about_dialog ) { this.about_dialog.destroy(); }
+        this.about_dialog = Ext.create('Rally.technicalservices.InfoLink',{});
+    },
+    
+    _filterOutExceptChoices: function(store) {
+        var app = Rally.getApp();
+        app.logger.log('_filterOutExceptChoices');
+        
+        store.filter([{
+            filterFn:function(field){ 
+                app.logger.log('field:', field);
+                
+                var attribute_definition = field.get('fieldDefinition').attributeDefinition;
+                var attribute_type = null;
+                if ( attribute_definition ) {
+                    attribute_type = attribute_definition.AttributeType;
+                }
+                if (  attribute_type == "BOOLEAN" ) {
+                    return true;
+                }
+                if ( attribute_type == "STRING" || attribute_type == "STATE" ) {
+                    if ( field.get('fieldDefinition').attributeDefinition.Constrained ) {
+                        return true;
+                    }
+                }
+                if ( field.get('name') === 'State' ) { 
+                    return true;
+                }
+                return false;
+            } 
+        }]);
+    },
+    
+    getSettingsFields: function() {
+        var me = this;
+        
+        return [{
+            name: 'categoryField',
+            xtype: 'rallyfieldcombobox',
+            fieldLabel: 'Group By',
+            labelWidth: 75,
+            labelAlign: 'left',
+            minWidth: 200,
+            margin: 10,
+            autoExpand: false,
+            alwaysExpanded: false,
+            model: 'UserStory',
+            listeners: {
+                ready: function(field_box) {
+                    me._filterOutExceptChoices(field_box.getStore());
+                }
+            },
+            readyEvent: 'ready'
+        }];
+    },
+    
+    //onSettingsUpdate:  Override
+    onSettingsUpdate: function (settings){
+        this.logger.log('onSettingsUpdate',settings);
+        // Ext.apply(this, settings);
+        this.launch();
+    }
+});
+
+            
+               Rally.launchApp('TSStoryPie', {
+                   name: 'Story Pie By Field'
+               });
+        });
+    </script>
+    
+    <style type="text/css">
+
+.app {
+     /* Add app styles here */
+}
+
+    </style>
+
+</head>
+<body></body>
+</html>

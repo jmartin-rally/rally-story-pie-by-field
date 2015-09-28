@@ -1,25 +1,30 @@
-/*
- * This chart will display a pie chart of story points broken down by category.
- * 
- * The category is chosen by putting the Rally field name into categoryField
- * (remember there are no spaces in Rally field names)
- * 
- */
- Ext.define('CustomApp', {
+ Ext.define('TSStoryPie', {
     extend: 'Rally.app.App',
     componentCls: 'app',
-    categoryField: 'WorkType',
     allRelease: '--ANY--',
-    version: 0.1,
     defaults: { padding: 5 },
-    items: [{xtype:'container',itemId:'selector_box'},{xtype:'container',itemId:'chart_box'}],
+    logger: new Rally.technicalservices.Logger(),
+
+    items: [
+        {xtype:'container',itemId:'selector_box'},
+        {xtype:'container',itemId:'chart_box'}
+    ],
+    
+    config: {
+        defaultSettings: {
+            categoryField: 'ScheduleState'
+        }
+    },
+    
     launch: function() {
         this._addTimeboxSelector();
     },
+    
     _addTimeboxSelector: function() {
         var me = this;
+        
         var first_time = true;
-        me._log("_addTimeboxSelector");
+        
         this.down('#selector_box').add({
             xtype:'rallyreleasecombobox',
             itemId:'release_box',
@@ -69,33 +74,30 @@
             }
         });
     },
-    _log: function( msg ) {
-        var me = this;
-        window.console && console.log( new Date(), msg );
-    },
+
     _getStories: function(release_name) {
-        this._log(["_getStories",release_name]);
-        this._showMask("Loading stories...");
+        this.setLoading("Finding Stories in Release: ", release_name);
+        
         if ( this.chart ) { this.chart.destroy(); }
         var filters = [{property:'Release.Name',value:release_name}];
         if ( release_name === this.allRelease ) {
             filters = [{property:'ObjectID',operator:'>',value:0}];
         }
+        
+        var fetch_fields = ['PlanEstimate', this.getSetting('categoryField')];
+        
         Ext.create('Rally.data.WsapiDataStore',{
             model:'UserStory',
             autoLoad: true,
             filters: filters,
+            fetch: fetch_fields,
+            limit: Infinity,
             listeners: {
                 load: function(store,data){
-                    this._log(["store",data]);
                     if ( data.length === 0 ) {
                         this._showNoData();
                     } else {
-                        if ( ! this._isValidField( this.categoryField, data[0] ) ){
-                            alert(this.categoryField + " is not a valid field name for this model");
-                        } else {
-                            this._countPointsByCategory(data);
-                        }
+                        this._countPointsByCategory(data);
                     }
                    
                 },
@@ -103,22 +105,27 @@
             }
         });
     },
+    
     _showNoData: function() {
         if ( this.chart ) { 
             this.chart.destroy();
         }
         this.chart = Ext.create('Ext.container.Container', {html:'No data found in selected release.'});
         this.down('#chart_box').add(this.chart);
-        this._hideMask();
+        this.setLoading(false);
     },
+    
     _countPointsByCategory: function(records) {
-        this._log("_countPointsByCategory");
-        var me = this;
+        this.logger.log("_countPointsByCategory");
+
         var counts = {};
         var counter = 0;
         var total = 0;
+        var category_field = this.getSetting('categoryField');
+        this.logger.log("Category Field:", category_field);
+        
         Ext.Array.each( records, function(record) {
-                var category = record.get(me.categoryField);
+                var category = record.get(category_field);
                 var points = record.get('PlanEstimate') || 0;
                 if ( ! category || category === "" ) {
                     category = "No Category";
@@ -129,7 +136,6 @@
                 counter++;
         });
         
-        this._log(["for ", counter, " records: ", counts]);
         // normalize to percentages
         var count_array = [];
         for ( var category in counts ) {
@@ -143,21 +149,27 @@
         }
         this._showPie(count_array);
     },
+    
     _showPie:function(count_array){
-        this._log(["_showPie",count_array]);
+        this.logger.log('_showPie', count_array);
+        
         var me = this;
+        
         var int_array = [];
         Ext.Array.each(count_array,function(item){
             int_array.push([item.name,item.percentage]);
         });
-        me._log("change!");
-        var store = Ext.create('Rally.data.custom.Store',{
-            data: count_array
-        });
+
         if ( this.chart ) { this.chart.destroy(); }
         this.chart = Ext.create('Rally.ui.chart.Chart',{
+            loadMask: false,
+            chartData: {
+                series: [{type:'pie',data:int_array}]
+            },
             chartConfig: {
-                chart: {
+
+                chart: { 
+                    type: 'pie',
                     plotBackgroundColor: null,
                     plotBorderWidth: null,
                     plotShadow: false
@@ -181,39 +193,91 @@
                             }
                         }
                     }
-                },
-                series: [{
-                    type: 'pie',
-                    data: int_array
-                }]
+                }
             }
         });
-        this._log("chart made");
+
+        console.log('box:', this.down('#chart_box'));
+        
         this.down('#chart_box').add(this.chart);
-        this._hideMask();
-        this._log("chart done");
+        this.setLoading(false);
+        this.logger.log('done');
     },
     _limitDecimals: function(initial_value) {
         return parseInt( 10*initial_value, 10 ) / 10;
     },
-    _isValidField: function( fieldname, model ) {
-        var me = this;
-        var valid = false;
-        Ext.Array.each( model.getFields(), function(field){
-            if ( field.name === fieldname ) {
-                valid = true;
-                return;
+    
+    getOptions: function() {
+        return [
+            {
+                text: 'About...',
+                handler: this._launchInfo,
+                scope: this
             }
-        });
-        return valid;
+        ];
     },
-    _showMask: function(msg) {
-        if ( this.getEl() ) { 
-            this.getEl().unmask();
-            this.getEl().mask(msg);
-        }
+    
+    _launchInfo: function() {
+        if ( this.about_dialog ) { this.about_dialog.destroy(); }
+        this.about_dialog = Ext.create('Rally.technicalservices.InfoLink',{});
     },
-    _hideMask: function() {
-        this.getEl().unmask();
+    
+    _filterOutExceptChoices: function(store) {
+        var app = Rally.getApp();
+        app.logger.log('_filterOutExceptChoices');
+        
+        store.filter([{
+            filterFn:function(field){ 
+                app.logger.log('field:', field);
+                
+                var attribute_definition = field.get('fieldDefinition').attributeDefinition;
+                var attribute_type = null;
+                if ( attribute_definition ) {
+                    attribute_type = attribute_definition.AttributeType;
+                }
+                if (  attribute_type == "BOOLEAN" ) {
+                    return true;
+                }
+                if ( attribute_type == "STRING" || attribute_type == "STATE" ) {
+                    if ( field.get('fieldDefinition').attributeDefinition.Constrained ) {
+                        return true;
+                    }
+                }
+                if ( field.get('name') === 'State' ) { 
+                    return true;
+                }
+                return false;
+            } 
+        }]);
+    },
+    
+    getSettingsFields: function() {
+        var me = this;
+        
+        return [{
+            name: 'categoryField',
+            xtype: 'rallyfieldcombobox',
+            fieldLabel: 'Group By',
+            labelWidth: 75,
+            labelAlign: 'left',
+            minWidth: 200,
+            margin: 10,
+            autoExpand: false,
+            alwaysExpanded: false,
+            model: 'UserStory',
+            listeners: {
+                ready: function(field_box) {
+                    me._filterOutExceptChoices(field_box.getStore());
+                }
+            },
+            readyEvent: 'ready'
+        }];
+    },
+    
+    //onSettingsUpdate:  Override
+    onSettingsUpdate: function (settings){
+        this.logger.log('onSettingsUpdate',settings);
+        // Ext.apply(this, settings);
+        this.launch();
     }
 });

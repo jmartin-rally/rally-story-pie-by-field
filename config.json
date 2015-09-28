@@ -1,12 +1,7 @@
 {
-    "name": "Work Type Pie",
-    "className": "CustomApp",
-    "server": "https://rally1.rallydev.com",
-    "sdk": "2.0p5",
-    "javascript": [
-        "App.js"
-    ],
-    "css": [
-        "app.css"
-    ]
+    "name": "Story Pie By Field",
+    "className": "TSStoryPie",
+    "server": "https://demo-west.rallydev.com",
+    "sdk": "2.0",
+    "apiKey": "_PUT_APIKEY_HERE_"
 }
